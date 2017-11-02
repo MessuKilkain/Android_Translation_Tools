@@ -20,6 +20,28 @@ def splitLocalizationWithPlural(localization):
 			raise TypeError(u"value("+str(value)+u") of key("+str(key)+u") is not a string neither a dictionary", [{u'key':key, u'value':value}])
 	return splittedDict
 
+def joinLocalizationWithPlural(localization):
+	joinedDict = dict()
+	for (key, value) in iteritems(localization):
+		# print( '- ', key, type(key) )
+		# print( '\t- ', value, type(value) )
+		if type(key) is type(str()):
+			if "/" in key :
+				splitted = key.split(sep="/",maxsplit=1)
+				trueKey = splitted[0]
+				pluralKey = splitted[1]
+				if trueKey in joinedDict:
+					if type(joinedDict[trueKey]) is not type(dict()):
+						raise TypeError(u"key("+str(key)+u") with value("+str(value)+u") has already a non-plural value joined", [{u'key':key, u'value':value, u'joinedDict':joinedDict}])
+				else:
+					joinedDict[trueKey] = dict()
+				joinedDict[trueKey][pluralKey] = value
+			else:
+				joinedDict[key] = value
+		else:
+			raise TypeError(u"key("+str(key)+u") with value("+str(value)+u") is not a string", [{u'key':key, u'value':value}])
+	return joinedDict
+
 def parseFilePathToLocalizedStringsDictionary(filePath,output=None):
 	localizedStringsDictionary = dict()
 	with open(filePath, 'r', encoding='utf-8') as infile:
@@ -194,6 +216,27 @@ def formatAndCompleteLocalizationFile(sourceLocalizationFilePath,destinationLoca
 				print(content)
 	return
 
+def exportLocalizationToAndroidStringFile(destinationLocalizationFilePath,localization,encoding=u"utf-8",):
+	indentOffsetString = "    "
+	with open(destinationLocalizationFilePath, 'w', encoding='utf-8') as outfile:
+		soup = BeautifulSoup("<b></b>", 'html.parser')
+		print("<resources>",file=outfile)
+		for key, value in localization.items():
+			if type(value) is dict:
+				print(indentOffsetString+"<plurals name=\""+key+"\">",file=outfile)
+				for itemKey, itemValue in value.items():
+					newItemTag = soup.new_tag(name=u'item', quantity=itemKey)
+					newItemTag.append(itemValue)
+					print(indentOffsetString+indentOffsetString+str(newItemTag),file=outfile)
+				print(indentOffsetString+"</plurals>",file=outfile)
+			else:
+				newItemTag = soup.new_tag(name=u'string')
+				newItemTag['name'] = key
+				newItemTag.append(str(value))
+				print(indentOffsetString+str(newItemTag),file=outfile)
+		print("</resources>",file=outfile)
+	return
+
 class NullPrint:
 	def write(self,string):
 		return
@@ -225,3 +268,34 @@ def exportLocalizationToCsvFile(outputFileName,keys,localization,encoding=u"utf-
 					rowToWrite[fieldname] = localization[fieldname][key]
 			writer.writerow(rowToWrite)
 	return
+
+
+
+def importLocalizationFromCsvFile(inputFileName,encoding=u"utf-8"):
+	'''
+	Parse and return localization from a CSV file.
+
+	:param str inputFileName: The path to csv file to import from
+	:param str encoding: Encoding used for open (optional)
+	:return: The list of localization keys and the dictionary of dictionaries of localized texts, first level key being the language or 'Comment', second level key being the localization key for the translated text or the comment
+	:rtype: (list,dict)
+	:raises ValueError: if 'Key' is not present in the csv fieldnames
+	'''
+	extractedValues = dict()
+	extractedKeys = list()
+
+	with open( inputFileName, u"r", encoding=encoding ) as csvfile:
+		reader = csv.DictReader(csvfile)
+		csvFieldnames = list(reader.fieldnames)
+		if not FIELDNAME_KEY in csvFieldnames:
+			raise ValueError(FIELDNAME_KEY + u" is not present as a fieldname in csv.")
+		else:
+			csvFieldnames.remove(FIELDNAME_KEY)
+			for fieldname in csvFieldnames:
+				extractedValues[fieldname] = dict()
+			for row in reader:
+				key = row[FIELDNAME_KEY]
+				extractedKeys.append(key)
+				for fieldname in csvFieldnames:
+					extractedValues[fieldname][key] = row[fieldname]
+	return (extractedKeys, extractedValues)
